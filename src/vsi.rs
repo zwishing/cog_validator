@@ -2,7 +2,6 @@ use gdal_sys::{VSIFCloseL, VSIFOpenL, VSIFReadL, VSIFSeekL, VSIVirtualHandle};
 use std::ffi::{c_void, CString};
 use thiserror::Error;
 
-
 #[derive(Debug, Error)]
 pub enum VSIError {
     #[error("Failed to seek file")]
@@ -166,6 +165,4 @@ impl VSIFile {
 }
 
 #[cfg(test)]
-mod test {
-    use super::VSIFile;
-}
+mod test {}
