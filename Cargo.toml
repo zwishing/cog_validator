@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-gdal-sys = "0.9.1"
-gdal = "0.16.0"
+gdal-sys = "0.10.0"
+gdal = "0.17.0"
 anyhow = "1.0.83"
 byteorder = "1.5.0"
 libc = "0.2.153"

@@ -2,6 +2,7 @@ use crate::vsi::{FileAccessMode, VSIError, VSIFile, Whence};
 use gdal::raster::RasterBand;
 use gdal_sys::CSLDestroy;
 use std::ffi::CStr;
+use std::path::Path;
 
 use gdal::errors::GdalError;
 use gdal::{Dataset, Metadata};
@@ -48,16 +49,16 @@ pub enum ValidateCOGError {
     },
 }
 
-pub fn validate_cloudgeotiff(file_path: &str) -> Result<bool, ValidateCOGError> {
+pub fn validate_cloudgeotiff<P: AsRef<Path>>(file_path: &P) -> Result<bool, ValidateCOGError> {
     let dst = &Dataset::open(file_path)?;
     if dst.driver().short_name() != "GTiff" {
         return Err(ValidateCOGError::NotGeoTIFFError);
     };
-    _validate(dst, file_path)?;
+    _validate(dst, file_path.as_ref())?;
     Ok(true)
 }
 
-fn _validate(dst: &Dataset, file_path: &str) -> Result<bool, ValidateCOGError> {
+fn _validate(dst: &Dataset, file_path: &Path) -> Result<bool, ValidateCOGError> {
     let main_band = &dst.rasterband(1)?;
     let ovr_count = main_band.overview_count()?;
 
@@ -214,7 +215,7 @@ fn _validate_mask_band(
 
 fn _validate_ovr(f: &VSIFile, band: &RasterBand, ovr_count: i32) -> Result<bool, ValidateCOGError> {
     for i in 0..ovr_count {
-        let ovr_band = &band.overview(i as isize)?;
+        let ovr_band = &band.overview(i as usize)?;
         let ovr = format!("overview_{}", i);
         _validate_band(f, ovr.as_str(), ovr_band)?;
         _validate_mask_band(f, ovr.as_str(), ovr_band)?;

@@ -1,12 +1,16 @@
+use std::path::Path;
+
 pub mod validator;
 pub mod vsi;
 
-pub fn cog_validator(url: &str) -> Result<bool, validator::ValidateCOGError> {
-    validator::validate_cloudgeotiff(url)
+pub fn cog_validator<P: AsRef<Path>>(path: P) -> Result<bool, validator::ValidateCOGError> {
+    validator::validate_cloudgeotiff(&path)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use super::*;
     #[test]
     pub fn test_cog_validator_from_http() {
@@ -17,8 +21,10 @@ mod tests {
 
     #[test]
     pub fn test_cog_validator_from_local() {
-        let url = "/Users/zwishing/code/rust/cog_validator/src/data/PuertoRicoTropicalFruit_cog.tif";
-        let result = cog_validator(url).unwrap();
+        let mut current_dir = env::current_dir().unwrap();
+        current_dir.push("src/data/PuertoRicoTropicalFruit_cog.tif");
+        let result = cog_validator(current_dir).unwrap();
         assert_eq!(result, true)
+        
     }
 }

@@ -1,5 +1,5 @@
 use gdal_sys::{VSIFCloseL, VSIFOpenL, VSIFReadL, VSIFSeekL, VSIVirtualHandle};
-use std::ffi::{c_void, CString};
+use std::{ffi::{c_void, CString}, path::Path};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -99,9 +99,10 @@ pub struct VSIFile {
 }
 
 impl VSIFile {
-    pub fn vsi_fopenl(url: &str, mode: FileAccessMode) -> Result<Self, VSIError> {
+    pub fn vsi_fopenl(path: &Path, mode: FileAccessMode) -> Result<Self, VSIError> {
         unsafe {
-            let filename_c = CString::new(url).expect("CString conversion failed");
+            let path_str = path.to_string_lossy();
+            let filename_c = CString::new(path_str.as_ref()).expect("CString conversion failed");
             let mode_c = mode.to_c_str();
             let file_handle = VSIFOpenL(filename_c.as_ptr(), mode_c.as_ptr());
             if file_handle.is_null() {
