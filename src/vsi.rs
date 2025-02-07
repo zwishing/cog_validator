@@ -5,29 +5,29 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum VSIError {
     #[error("Failed to seek file")]
-    SeekError,
+    SeekError,    // Error when seeking within a file fails
     #[error("Failed to open file")]
-    OpenError,
+    OpenError,    // Error when opening a file fails
     #[error("Failed to read expected number of bytes")]
-    ReadError,
+    ReadError,    // Error when reading the expected number of bytes fails
     #[error("Failed to close file")]
-    CloseError,
+    CloseError,   // Error when closing a file fails
 }
 
 #[derive(Debug)]
 pub enum FileAccessMode {
-    Read,
-    ReadBinary,
-    Write,
-    WriteBinary,
-    Append,
-    AppendBinary,
-    ReadWrite,
-    ReadWriteBinary,
-    WriteRead,
-    WriteReadBinary,
-    AppendRead,
-    AppendReadBinary,
+    Read,           // Open file for reading only
+    ReadBinary,     // Open file for reading in binary mode
+    Write,          // Open file for writing only
+    WriteBinary,    // Open file for writing in binary mode
+    Append,         // Open file for appending
+    AppendBinary,   // Open file for appending in binary mode
+    ReadWrite,      // Open file for both reading and writing
+    ReadWriteBinary, // Open file for both reading and writing in binary mode
+    WriteRead,      // Open file for writing and reading
+    WriteReadBinary, // Open file for writing and reading in binary mode
+    AppendRead,     // Open file for appending and reading
+    AppendReadBinary, // Open file for appending and reading in binary mode
 }
 
 impl FileAccessMode {
@@ -68,9 +68,9 @@ impl FileAccessMode {
 }
 
 pub enum Whence {
-    SeekSet,
-    SeekCur,
-    SeekEnd,
+    SeekSet,    // Seek from the beginning of the file
+    SeekCur,    // Seek from the current position
+    SeekEnd,    // Seek from the end of the file
 }
 
 impl From<i32> for Whence {
@@ -95,10 +95,15 @@ impl Into<i32> for Whence {
 }
 
 pub struct VSIFile {
-    c_vsilfile: *mut VSIVirtualHandle,
+    c_vsilfile: *mut VSIVirtualHandle,  // Raw pointer to GDAL's virtual file handle
 }
 
 impl VSIFile {
+    /// Opens a file using GDAL's Virtual File System
+    /// 
+    /// # Arguments
+    /// * `path` - Path to the file to open
+    /// * `mode` - File access mode
     pub fn vsi_fopenl(path: &Path, mode: FileAccessMode) -> Result<Self, VSIError> {
         unsafe {
             let path_str = path.to_string_lossy();
@@ -114,6 +119,11 @@ impl VSIFile {
         }
     }
 
+    /// Seeks to a position in the file
+    /// 
+    /// # Arguments
+    /// * `offset` - Number of bytes to offset from the whence position
+    /// * `whence` - Position from where to seek
     pub fn vsi_fseekl(&self, offset: u64, whence: Whence) -> Result<(), VSIError> {
         let n = unsafe { VSIFSeekL(self.c_vsilfile(), offset, whence.into()) };
         if n != 0 {
@@ -123,6 +133,10 @@ impl VSIFile {
         Ok(())
     }
 
+    /// Reads data from the file into a buffer
+    /// 
+    /// # Arguments
+    /// * `buffer` - Buffer to read the data into
     pub fn vsi_freadl(&self, buffer: &mut [u8]) -> Result<usize, VSIError> {
         let bytes_read = unsafe {
             VSIFReadL(
@@ -140,6 +154,7 @@ impl VSIFile {
         Ok(bytes_read)
     }
 
+    /// Closes the file
     pub fn vsi_fclosel(&self) -> Result<(), VSIError> {
         unsafe {
             if VSIFCloseL(self.c_vsilfile()) != 0 {
@@ -149,6 +164,12 @@ impl VSIFile {
         Ok(())
     }
 
+    /// Reads exact number of bytes at a specific position in the file
+    /// 
+    /// # Arguments
+    /// * `buffer` - Buffer to read the data into
+    /// * `offset` - Position to start reading from
+    /// * `whenc` - Position reference for the offset
     pub fn read_exact_at(
         &self,
         buffer: &mut [u8],
@@ -160,6 +181,7 @@ impl VSIFile {
         Ok(n)
     }
 
+    /// Returns the raw GDAL virtual file handle
     pub fn c_vsilfile(&self) -> *mut VSIVirtualHandle {
         self.c_vsilfile
     }

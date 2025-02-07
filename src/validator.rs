@@ -14,6 +14,7 @@ use std::str;
 use libc::c_char;
 
 #[derive(Debug, Error)]
+/// Enum representing various errors that can occur during Cloud Optimized GeoTIFF validation
 pub enum ValidateCOGError {
     #[error(transparent)]
     GdalError(#[from] GdalError),
@@ -49,6 +50,14 @@ pub enum ValidateCOGError {
     },
 }
 
+/// Validates if a given file is a valid Cloud Optimized GeoTIFF (COG)
+/// 
+/// # Arguments
+/// * `file_path` - Path to the file to validate
+/// 
+/// # Returns
+/// * `Ok(true)` if the file is a valid COG
+/// * `Err(ValidateCOGError)` if validation fails
 pub fn validate_cloudgeotiff<P: AsRef<Path>>(file_path: &P) -> Result<bool, ValidateCOGError> {
     let dst = &Dataset::open(file_path)?;
     if dst.driver().short_name() != "GTiff" {
@@ -58,6 +67,11 @@ pub fn validate_cloudgeotiff<P: AsRef<Path>>(file_path: &P) -> Result<bool, Vali
     Ok(true)
 }
 
+/// Internal validation function that performs the actual COG validation checks
+/// 
+/// # Arguments
+/// * `dst` - GDAL Dataset to validate
+/// * `file_path` - Path to the file being validated
 fn _validate(dst: &Dataset, file_path: &Path) -> Result<bool, ValidateCOGError> {
     let main_band = &dst.rasterband(1)?;
     let ovr_count = main_band.overview_count()?;
@@ -79,6 +93,8 @@ fn _validate(dst: &Dataset, file_path: &Path) -> Result<bool, ValidateCOGError> 
     Ok(true)
 }
 
+/// Checks if there are any external overview files (.ovr)
+/// External overviews are not allowed in a valid COG
 fn _check_external_ovr(file_list: Vec<String>) -> Result<bool, ValidateCOGError> {
     if !file_list.is_empty() {
         for file in file_list {
@@ -90,6 +106,7 @@ fn _check_external_ovr(file_list: Vec<String>) -> Result<bool, ValidateCOGError>
     Ok(true)
 }
 
+/// Validates the main band properties including size and tiling
 fn _check_main_band(band: &RasterBand, ovr_count: i32) -> Result<bool, ValidateCOGError> {
     if band.x_size() > 512 || band.y_size() > 512 {
         let block_size = band.block_size();
@@ -106,6 +123,12 @@ fn _check_main_band(band: &RasterBand, ovr_count: i32) -> Result<bool, ValidateC
     Ok(true)
 }
 
+/// Validates a specific raster band by checking all its blocks
+/// 
+/// # Arguments
+/// * `f` - VSI file handle
+/// * `band_name` - Name of the band being validated
+/// * `band` - The raster band to validate
 fn _validate_band(
     f: &VSIFile,
     band_name: &str,
@@ -123,6 +146,15 @@ fn _validate_band(
     Ok(true)
 }
 
+/// Validates a specific block within a band
+/// 
+/// # Arguments
+/// * `f` - VSI file handle
+/// * `band_name` - Name of the band being validated
+/// * `band` - The raster band containing the block
+/// * `x` - X coordinate of the block
+/// * `y` - Y coordinate of the block
+/// * `last_offset` - Offset of the previous block
 fn _validate_block(
     f: &VSIFile,
     band_name: &str,
@@ -153,6 +185,7 @@ fn _validate_block(
     Ok(true)
 }
 
+/// Checks if the leader size matches the block byte count
 fn _check_leader_size(
     f: &VSIFile,
     band_name: &str,
@@ -178,6 +211,7 @@ fn _check_leader_size(
     Ok(true)
 }
 
+/// Validates the trailer bytes of a block
 fn _check_trailer_bytes(
     f: &VSIFile,
     band_name: &str,
@@ -201,6 +235,7 @@ fn _check_trailer_bytes(
     Ok(true)
 }
 
+/// Validates the mask band if present
 fn _validate_mask_band(
     f: &VSIFile,
     band_name: &str,
@@ -213,6 +248,7 @@ fn _validate_mask_band(
     Ok(true)
 }
 
+/// Validates all overview bands
 fn _validate_ovr(f: &VSIFile, band: &RasterBand, ovr_count: i32) -> Result<bool, ValidateCOGError> {
     for i in 0..ovr_count {
         let ovr_band = &band.overview(i as usize)?;
@@ -223,14 +259,19 @@ fn _validate_ovr(f: &VSIFile, band: &RasterBand, ovr_count: i32) -> Result<bool,
     Ok(true)
 }
 
-// util functions from gdal
+// Utility functions
+/// Converts a raw C string array to a Vector of Strings
 pub fn _string_array(raw_ptr: *mut *mut c_char) -> Vec<String> {
     _convert_raw_ptr_array(raw_ptr, _string)
 }
+
+/// Converts a raw C string to a Rust String
 pub fn _string(raw_ptr: *const c_char) -> String {
     let c_str = unsafe { CStr::from_ptr(raw_ptr) };
     c_str.to_string_lossy().into_owned()
 }
+
+/// Helper function to convert raw C string arrays
 fn _convert_raw_ptr_array<F, R>(raw_ptr: *mut *mut c_char, convert: F) -> Vec<R>
 where
     F: Fn(*const c_char) -> R,
