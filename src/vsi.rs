@@ -188,4 +188,46 @@ impl VSIFile {
 }
 
 #[cfg(test)]
-mod test {}
+mod test {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_file_access_mode_to_c_str() {
+        assert_eq!(FileAccessMode::Read.to_c_str().to_str().unwrap(), "r");
+        assert_eq!(FileAccessMode::ReadBinary.to_c_str().to_str().unwrap(), "rb");
+        assert_eq!(FileAccessMode::Write.to_c_str().to_str().unwrap(), "w");
+        assert_eq!(FileAccessMode::WriteBinary.to_c_str().to_str().unwrap(), "wb");
+    }
+
+    #[test]
+    fn test_whence_conversion() {
+        assert_eq!(0, Whence::SeekSet.into());
+        assert_eq!(1, Whence::SeekCur.into());
+        assert_eq!(2, Whence::SeekEnd.into());
+
+        assert!(matches!(Whence::from(0), Whence::SeekSet));
+        assert!(matches!(Whence::from(1), Whence::SeekCur));
+        assert!(matches!(Whence::from(2), Whence::SeekEnd));
+    }
+
+
+    #[test]
+    fn test_vsi_file_open_success() -> Result<(), VSIError> {
+        let path = PathBuf::from("/vsicurl/https://download.osgeo.org/gdal/data/gtiff/small_world.tif");
+        let vsi_file = VSIFile::vsi_fopenl(&path, FileAccessMode::ReadBinary)?;
+        
+        // Verify if the file is opened successfully
+        let mut buffer = [0u8; 2];
+        vsi_file.read_exact_at(&mut buffer, 0, Whence::SeekSet)?;
+        
+        // Check TIFF file header magic number
+        assert!(
+            &buffer == b"II" || &buffer == b"MM",
+            "Not a valid TIFF file header"
+        );
+
+        vsi_file.vsi_fclosel()?;
+        Ok(())
+    }
+}
