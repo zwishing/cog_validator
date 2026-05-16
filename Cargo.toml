@@ -1,17 +1,28 @@
 [package]
 name = "cog_validator"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["ZhangWeixin <zwishingbjfu@gmail.com>"]
-description = "A library for validating Cloud Optimized GeoTIFFs (COGs)"
-keywords = ["gdal", "cog", "validator"]
+description = "Validate Cloud Optimized GeoTIFF (COG) files. Parity with rouault/cog_validator (GDAL reference)."
+keywords = ["gdal", "cog", "geotiff", "validator", "geospatial"]
+categories = ["science::geo", "filesystem"]
 license = "MIT"
+readme = "README.md"
 repository = "https://github.com/zwishing/cog_validator"
+documentation = "https://docs.rs/cog_validator"
+exclude = [
+    "fixtures/",
+    "target/",
+    ".github/",
+    ".idea/",
+    ".DS_Store",
+    "*.tif",
+    "*.tiff",
+]
 
 [dependencies]
-gdal-sys = "0.10.0"
-gdal = "0.17.0"
-anyhow = "1.0.83"
+gdal-sys = "0.12.0"
+gdal = "0.19.0"
 byteorder = "1.5.0"
 libc = "0.2.153"
-thiserror="1.0.57"
+thiserror = "2.0"

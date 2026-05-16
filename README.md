@@ -4,20 +4,64 @@
 
 This project is a Cloud Optimized GeoTIFF (COG) validator implemented in Rust using GDAL. It checks compliance of GeoTIFF files with the COG specification, ensuring they are optimized for cloud storage and efficient access.
 
-Inspired by the [cog-validator-java](https://github.com/batugane/cog-validator-java) project, which provides a similar COG validator implemented in Java.
+The validation logic mirrors [rouault/cog_validator](https://github.com/rouault/cog_validator) (the reference Python validator shipped with GDAL) and was initially inspired by [cog-validator-java](https://github.com/batugane/cog-validator-java).
 
 ## Features
 
-- **Supports GDAL Virtual File Systems**: Utilizes GDAL's Virtual File System capabilities for versatile data access.
+- **Supports GDAL Virtual File Systems**: Validates local files and remote sources via `/vsicurl/`, `/vsis3/`, `/vsimem/`, etc.
+- **Warnings vs errors**: Hard errors fail validation; soft issues (e.g. large image without overviews) are returned as warnings via `ValidationReport`.
+- **Configurable strictness** through `ValidationOptions`.
+
+## Validation Checks
+
+### File-level structure
+- Driver must be `GTiff`.
+- Overviews must be internal — no external `.ovr` sidecar allowed.
+- Main IFD must be at offset `8` (classic TIFF) / `16` (BigTIFF), or immediately after a `GDAL_STRUCTURAL_METADATA` block aligned to a 2-byte boundary.
+- `GDAL_STRUCTURAL_METADATA` block is parsed for the flags:
+  - `BLOCK_ORDER=ROW_MAJOR`
+  - `BLOCK_LEADER=SIZE_AS_UINT4`
+  - `BLOCK_TRAILER=LAST_4_BYTES_REPEATED`
+  - `MASK_INTERLEAVED_WITH_IMAGERY=YES`
+- `KNOWN_INCOMPATIBLE_EDITION=YES` is rejected.
+
+### Image structure metadata
+- `LAYOUT=COG` is required (configurable, downgradable to warning).
+- `COMPRESSION` must be one of: `LZW`, `DEFLATE`, `ZSTD`, `LERC`, `LERC_DEFLATE`, `LERC_ZSTD`, `WEBP`, `JPEG`, `JXL`, `PACKBITS`, `CCITTFAX4`.
+- `INTERLEAVE` must be `BAND`, `PIXEL`, or `TILE`.
+- Georeferencing (projection + geotransform) is required (configurable).
+
+### Main image / bands
+- Images larger than 512 px in either dimension must be tiled.
+- Tile dimensions must be multiples of 16.
+- Large images without internal overviews produce a warning (configurable to error).
+
+### Overviews
+- Overview dimensions must strictly decrease as the level index increases.
+- Overview reduction factor (in both x and y) must strictly increase as the level index increases.
+- Overview IFD offsets must be in increasing order.
+- Each overview must be tiled.
+- First data block of the smallest overview must be after its own IFD.
+- For multi-overview files: data block of overview `i` must be after data block of overview `i+1` (smallest overview is written first).
+- First data block of the main image must be after the first data block of overview 0 (largest overview).
+
+### Per-block (when corresponding structural metadata flags are present)
+- `BLOCK_LEADER=SIZE_AS_UINT4`: the uint32 leader preceding each block must match its byte count.
+- `BLOCK_TRAILER=LAST_4_BYTES_REPEATED`: the last 4 bytes of each block must be repeated as the trailing 4 bytes.
+- `BLOCK_ORDER=ROW_MAJOR`: block offsets within a band must be non-decreasing in row-major order.
+
+### Mask bands
+- Per-dataset mask bands are recursively validated.
+- When `MASK_INTERLEAVED_WITH_IMAGERY=YES`:
+  - Mask block size must match the imagery band block size.
+  - For each block, `mask_offset == imagery_offset + byte_count + leader_pad + trailer_pad`.
 
 ## Requirements
 
-- Rust Programming Language
-- [GDAL](https://gdal.org/) Library (must be installed separately)
+- Rust toolchain
+- [GDAL](https://gdal.org/) library (installed separately)
 
 ## Installation
-
-To use the COG validator, clone the repository and compile the Rust code:
 
 ```bash
 git clone https://github.com/Zwishing/cog_validator.git
@@ -26,6 +70,8 @@ cargo build --release
 ```
 
 ## Usage
+
+### Basic check (boolean result)
 
 ```rust
 use cog_validator::cog_validator;
@@ -36,16 +82,52 @@ fn main() {
 }
 ```
 
+### Detailed report with warnings
+
+```rust
+use cog_validator::{cog_validator_with_options, validator::ValidationOptions};
+
+fn main() {
+    let report = cog_validator_with_options(
+        "path/to/file.tif",
+        ValidationOptions::default(),
+    );
+    match report {
+        Ok(r) => {
+            for w in &r.warnings {
+                println!("warning: {w}");
+            }
+            println!("valid COG with {} warning(s)", r.warnings.len());
+        }
+        Err(e) => eprintln!("invalid COG: {e}"),
+    }
+}
+```
+
+### Configuring strictness
+
+```rust
+use cog_validator::validator::ValidationOptions;
+
+let options = ValidationOptions {
+    require_cog_layout: true,                          // require LAYOUT=COG
+    require_georeferencing: false,                     // downgrade to warning
+    require_internal_overviews_for_large_images: true, // promote to error
+};
+```
+
+| Option | Default | Effect |
+|---|---|---|
+| `require_cog_layout` | `true` | Missing `LAYOUT=COG` is an error (otherwise warning). |
+| `require_georeferencing` | `true` | Missing projection or geotransform is an error (otherwise warning). |
+| `require_internal_overviews_for_large_images` | `false` | When `true`, large image without overviews is an error instead of a warning. |
+
 ## License
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
-
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
-- [cog-validator-java](https://github.com/batugane/cog-validator-java) for the initial implementation in Java.
-- [GDAL](https://gdal.org/) for the powerful geospatial data handling capabilities. 
-
-
-
-    
+- [rouault/cog_validator](https://github.com/rouault/cog_validator) — the reference Python validator whose check semantics this project mirrors.
+- [cog-validator-java](https://github.com/batugane/cog-validator-java) — the original inspiration.
+- [GDAL](https://gdal.org/) — geospatial data handling library this validator builds on.
