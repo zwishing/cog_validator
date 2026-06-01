@@ -8,7 +8,7 @@ The validation logic mirrors [rouault/cog_validator](https://github.com/rouault/
 
 ## Features
 
-- **Supports GDAL Virtual File Systems**: Validates local files and remote sources via `/vsicurl/`, `/vsis3/`, `/vsimem/`, etc.
+- **Supports GDAL Virtual File Systems**: Validates local files and remote sources via `/vsicurl/`, `/vsis3/`, `/vsimem/`, etc. Common object-storage URLs such as `s3://bucket/key.tif` and `https://...` are normalized to GDAL VSI paths automatically.
 - **Warnings vs errors**: Hard errors fail validation; soft issues (e.g. large image without overviews) are returned as warnings via `ValidationReport`.
 - **Configurable strictness** through `ValidationOptions`.
 
@@ -103,6 +103,47 @@ fn main() {
     }
 }
 ```
+
+### Object storage via GDAL VSI
+
+```rust
+use cog_validator::cog_validator_with_options;
+use cog_validator::validator::ValidationOptions;
+
+fn main() {
+    let report = cog_validator_with_options(
+        "s3://my-bucket/path/to/cog.tif",
+        ValidationOptions::default(),
+    );
+    println!("{report:?}");
+}
+```
+
+The validator also accepts explicit GDAL paths such as `/vsis3/bucket/key.tif` and `/vsicurl/https://host/key.tif`. Credentials and endpoint configuration are handled by GDAL.
+
+For authenticated `/vsis3/` reads, configure GDAL before calling the validator:
+
+```rust
+use cog_validator::{cog_validator_with_options, ValidationOptions};
+use gdal::config::set_config_option;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    set_config_option("AWS_ACCESS_KEY_ID", "your-appkey")?;
+    set_config_option("AWS_SECRET_ACCESS_KEY", "your-secret")?;
+    set_config_option("AWS_REGION", "us-east-1")?;
+
+    let report = cog_validator_with_options(
+        "s3://my-bucket/path/to/cog.tif",
+        ValidationOptions::default(),
+    )?;
+    println!("{report:?}");
+    Ok(())
+}
+```
+
+For temporary credentials, also set `AWS_SESSION_TOKEN`. For S3-compatible
+services, set provider-specific GDAL options such as `AWS_S3_ENDPOINT`,
+`AWS_HTTPS`, and `AWS_VIRTUAL_HOSTING`.
 
 ### Configuring strictness
 

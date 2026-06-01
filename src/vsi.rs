@@ -1,8 +1,9 @@
 use gdal_sys::{VSIFCloseL, VSIFOpenL, VSIFReadL, VSIFSeekL, VSIVirtualHandle};
 use std::{
+    borrow::Cow,
     cell::Cell,
     ffi::{c_void, CStr, CString},
-    path::Path,
+    path::{Path, PathBuf},
     ptr,
 };
 use thiserror::Error;
@@ -90,6 +91,43 @@ impl From<Whence> for i32 {
     }
 }
 
+/// Converts common object-storage URLs into GDAL VSI paths.
+///
+/// Existing `/vsi*` paths and local paths are returned unchanged. Supported
+/// conversions include:
+///
+/// - `s3://bucket/key.tif` -> `/vsis3/bucket/key.tif`
+/// - `gs://bucket/key.tif` -> `/vsigs/bucket/key.tif`
+/// - `az://container/key.tif` -> `/vsiaz/container/key.tif`
+/// - `oss://bucket/key.tif` -> `/vsioss/bucket/key.tif`
+/// - `https://host/key.tif` -> `/vsicurl/https://host/key.tif`
+pub fn normalize_vsi_path(path: &Path) -> Cow<'_, Path> {
+    let path_str = path.to_string_lossy();
+    match normalize_vsi_path_str(&path_str) {
+        Cow::Borrowed(_) => Cow::Borrowed(path),
+        Cow::Owned(vsi_path) => Cow::Owned(PathBuf::from(vsi_path)),
+    }
+}
+
+pub fn normalize_vsi_path_str(path: &str) -> Cow<'_, str> {
+    if path.starts_with("/vsi") {
+        return Cow::Borrowed(path);
+    }
+
+    let Some((scheme, rest)) = path.split_once("://") else {
+        return Cow::Borrowed(path);
+    };
+
+    match scheme.to_ascii_lowercase().as_str() {
+        "s3" => Cow::Owned(format!("/vsis3/{rest}")),
+        "gs" => Cow::Owned(format!("/vsigs/{rest}")),
+        "az" => Cow::Owned(format!("/vsiaz/{rest}")),
+        "oss" => Cow::Owned(format!("/vsioss/{rest}")),
+        "http" | "https" => Cow::Owned(format!("/vsicurl/{path}")),
+        _ => Cow::Borrowed(path),
+    }
+}
+
 /// Owning wrapper around a GDAL `VSIVirtualHandle`.
 ///
 /// The handle is single-threaded: the type is intentionally `!Send + !Sync`
@@ -101,9 +139,9 @@ pub struct VSIFile {
 
 impl VSIFile {
     pub fn vsi_fopenl(path: &Path, mode: FileAccessMode) -> Result<Self, VSIError> {
-        let path_str = path.to_string_lossy();
-        let filename_c =
-            CString::new(path_str.as_ref()).map_err(|_| VSIError::PathContainsNul)?;
+        let vsi_path = normalize_vsi_path(path);
+        let path_str = vsi_path.as_ref().to_string_lossy();
+        let filename_c = CString::new(path_str.as_ref()).map_err(|_| VSIError::PathContainsNul)?;
         let mode_c = mode.as_c_mode();
         // SAFETY: `filename_c` and `mode_c` are NUL-terminated CStrings whose
         // backing storage lives for the duration of this call. GDAL returns
@@ -228,6 +266,46 @@ mod test {
     fn test_whence_try_from_invalid_value() {
         let result = Whence::try_from(3);
         assert!(matches!(result, Err(VSIError::InvalidWhence(3))));
+    }
+
+    #[test]
+    fn normalize_vsi_path_converts_object_storage_urls() {
+        assert_eq!(
+            normalize_vsi_path_str("s3://bucket/path/to/cog.tif").as_ref(),
+            "/vsis3/bucket/path/to/cog.tif"
+        );
+        assert_eq!(
+            normalize_vsi_path_str("gs://bucket/path/to/cog.tif").as_ref(),
+            "/vsigs/bucket/path/to/cog.tif"
+        );
+        assert_eq!(
+            normalize_vsi_path_str("az://container/path/to/cog.tif").as_ref(),
+            "/vsiaz/container/path/to/cog.tif"
+        );
+        assert_eq!(
+            normalize_vsi_path_str("oss://bucket/path/to/cog.tif").as_ref(),
+            "/vsioss/bucket/path/to/cog.tif"
+        );
+    }
+
+    #[test]
+    fn normalize_vsi_path_converts_http_urls_to_vsicurl() {
+        assert_eq!(
+            normalize_vsi_path_str("https://example.com/data/cog.tif").as_ref(),
+            "/vsicurl/https://example.com/data/cog.tif"
+        );
+    }
+
+    #[test]
+    fn normalize_vsi_path_leaves_existing_vsi_and_local_paths_unchanged() {
+        assert_eq!(
+            normalize_vsi_path_str("/vsis3/bucket/path/to/cog.tif").as_ref(),
+            "/vsis3/bucket/path/to/cog.tif"
+        );
+        assert_eq!(
+            normalize_vsi_path_str("fixtures/cog.tif").as_ref(),
+            "fixtures/cog.tif"
+        );
     }
 
     #[test]

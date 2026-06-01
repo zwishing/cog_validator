@@ -4,6 +4,7 @@ pub mod validator;
 pub mod vsi;
 
 pub use validator::{ValidateCOGError, ValidationOptions, ValidationReport};
+pub use vsi::{normalize_vsi_path, normalize_vsi_path_str};
 
 pub fn cog_validator<P: AsRef<Path>>(path: P) -> Result<bool, validator::ValidateCOGError> {
     validator::validate_cloudgeotiff(&path)
@@ -33,6 +34,8 @@ mod tests {
     const VALID: &[&str] = &[
         "68077a72c46a9912474701ef.tif",
         "AOT.tif",
+        "JL1GF04A_PMS_20230301124138_滇池会展中心_3857_cog.tif",
+        "JL1KF01B_PMSR5_20230517113518_昆明世纪城_3857_cog.tif",
         "PuertoRicoTropicalFruit.tiff",
         "PuertoRicoTropicalFruit_cog.tif",
         "antimeridian.tif",
@@ -46,8 +49,7 @@ mod tests {
         "xjejfvrbm1fbu1ecw-0000000000-0000008192.tif",
     ];
 
-    const VALID_WITH_NO_OVERVIEW_WARNING: &[&str] =
-        &["beach-geotiff.tif", "office-geotiff.tif"];
+    const VALID_WITH_NO_OVERVIEW_WARNING: &[&str] = &["beach-geotiff.tif", "office-geotiff.tif"];
 
     const LERC_REQUIRES_CODEC: &[&str] = &[
         "float32_1band_lerc_block32.tif",
@@ -64,9 +66,8 @@ mod tests {
     #[test]
     fn parity_with_reference_valid_files() {
         for name in VALID {
-            let report =
-                cog_validator_with_options(data_path(name), ValidationOptions::default())
-                    .unwrap_or_else(|e| panic!("{name} expected valid, got error: {e}"));
+            let report = cog_validator_with_options(data_path(name), ValidationOptions::default())
+                .unwrap_or_else(|e| panic!("{name} expected valid, got error: {e}"));
             assert!(
                 report.warnings.is_empty(),
                 "{name} expected no warnings, got: {:?}",
@@ -78,9 +79,8 @@ mod tests {
     #[test]
     fn parity_with_reference_no_overview_warning() {
         for name in VALID_WITH_NO_OVERVIEW_WARNING {
-            let report =
-                cog_validator_with_options(data_path(name), ValidationOptions::default())
-                    .unwrap_or_else(|e| panic!("{name} expected valid, got error: {e}"));
+            let report = cog_validator_with_options(data_path(name), ValidationOptions::default())
+                .unwrap_or_else(|e| panic!("{name} expected valid, got error: {e}"));
             assert!(
                 report
                     .warnings

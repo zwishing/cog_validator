@@ -40,7 +40,7 @@ dependencies = [
 
 [[package]]
 name = "cog_validator"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "byteorder",
  "gdal",

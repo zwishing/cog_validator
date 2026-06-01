@@ -1,4 +1,4 @@
-use crate::vsi::{FileAccessMode, VSIError, VSIFile, Whence};
+use crate::vsi::{normalize_vsi_path, FileAccessMode, VSIError, VSIFile, Whence};
 use gdal::errors::GdalError;
 use gdal::raster::RasterBand;
 use gdal::{Dataset, Metadata};
@@ -260,13 +260,14 @@ pub fn validate_cloudgeotiff_with_options<P: AsRef<Path>>(
     file_path: &P,
     options: ValidationOptions,
 ) -> Result<ValidationReport, ValidateCOGError> {
-    let dst = Dataset::open(file_path)?;
+    let vsi_path = normalize_vsi_path(file_path.as_ref());
+    let dst = Dataset::open(vsi_path.as_ref())?;
     if dst.driver().short_name() != "GTiff" {
         return Err(ValidateCOGError::NotGeoTIFFError);
     }
 
     let mut report = ValidationReport::default();
-    validate_dataset(&dst, file_path.as_ref(), options, &mut report)?;
+    validate_dataset(&dst, vsi_path.as_ref(), options, &mut report)?;
     Ok(report)
 }
 
@@ -310,13 +311,12 @@ fn validate_dataset(
 
         check_main_band(&band_name, &band, &options)?;
 
-        let interleaved_mask = if structural_md.mask_interleaved_with_imagery
-            && band.mask_flags()?.is_per_dataset()
-        {
-            Some(band.open_mask_band()?)
-        } else {
-            None
-        };
+        let interleaved_mask =
+            if structural_md.mask_interleaved_with_imagery && band.mask_flags()?.is_per_dataset() {
+                Some(band.open_mask_band()?)
+            } else {
+                None
+            };
         validate_band(
             &f,
             &band_name,
@@ -326,7 +326,14 @@ fn validate_dataset(
             &mut key_buf,
         )?;
         validate_mask_band(&f, &band_name, &band, &structural_md, &mut key_buf)?;
-        validate_overviews(&f, &band, band_ovr_count, &band_name, &structural_md, &mut key_buf)?;
+        validate_overviews(
+            &f,
+            &band,
+            band_ovr_count,
+            &band_name,
+            &structural_md,
+            &mut key_buf,
+        )?;
     }
 
     Ok(())
@@ -517,11 +524,11 @@ fn byte_contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 fn read_ifd_offset(band: &RasterBand, band_name: &str) -> Result<u64, ValidateCOGError> {
-    let value = band
-        .metadata_item("IFD_OFFSET", "TIFF")
-        .ok_or_else(|| ValidateCOGError::MissingIfdOffset {
+    let value = band.metadata_item("IFD_OFFSET", "TIFF").ok_or_else(|| {
+        ValidateCOGError::MissingIfdOffset {
             band_name: band_name.to_string(),
-        })?;
+        }
+    })?;
     value
         .parse::<u64>()
         .map_err(|_| ValidateCOGError::InvalidIfdOffsetValue {
@@ -720,11 +727,14 @@ fn validate_block(
 
     if let Some(mb) = interleaved_mask {
         // Reuse the same "BLOCK_OFFSET_x_y" key by building it in-place again.
-        let mask_offset =
-            read_optional_block_u64(mb, key_buf, "BLOCK_OFFSET_", x, y)?.unwrap_or(0);
+        let mask_offset = read_optional_block_u64(mb, key_buf, "BLOCK_OFFSET_", x, y)?.unwrap_or(0);
         if mask_offset > 0 {
             let leader_pad: u64 = if md.block_leader_size_as_uint4 { 4 } else { 0 };
-            let trailer_pad: u64 = if md.block_trailer_last_4_bytes_repeated { 4 } else { 0 };
+            let trailer_pad: u64 = if md.block_trailer_last_4_bytes_repeated {
+                4
+            } else {
+                0
+            };
             let expected = offset
                 .checked_add(byte_count)
                 .and_then(|v| v.checked_add(leader_pad))
@@ -774,10 +784,12 @@ fn read_block_u64(
     kind: MetaKind,
 ) -> Result<u64, ValidateCOGError> {
     write_block_key(key_buf, prefix, x, y);
-    let value = band.metadata_item(key_buf.as_str(), "TIFF").ok_or(match kind {
-        MetaKind::Offset => ValidateCOGError::MissingBlockOffsetMetadata { x, y },
-        MetaKind::Size => ValidateCOGError::MissingBlockSizeMetadata { x, y },
-    })?;
+    let value = band
+        .metadata_item(key_buf.as_str(), "TIFF")
+        .ok_or(match kind {
+            MetaKind::Offset => ValidateCOGError::MissingBlockOffsetMetadata { x, y },
+            MetaKind::Size => ValidateCOGError::MissingBlockSizeMetadata { x, y },
+        })?;
     parse_metadata_u64(key_buf, &value, x, y)
 }
 
@@ -886,13 +898,12 @@ fn validate_overviews(
     for level in 0..ovr_count {
         let ovr_band = band.overview(level)?;
         let ovr_name = format!("{} overview_{}", band_name, level);
-        let interleaved_mask = if md.mask_interleaved_with_imagery
-            && ovr_band.mask_flags()?.is_per_dataset()
-        {
-            Some(ovr_band.open_mask_band()?)
-        } else {
-            None
-        };
+        let interleaved_mask =
+            if md.mask_interleaved_with_imagery && ovr_band.mask_flags()?.is_per_dataset() {
+                Some(ovr_band.open_mask_band()?)
+            } else {
+                None
+            };
         validate_band(
             f,
             &ovr_name,
@@ -1178,7 +1189,10 @@ mod tests {
 
     #[test]
     fn byte_contains_finds_substring() {
-        assert!(byte_contains(b"foo BLOCK_ORDER=ROW_MAJOR bar", b"BLOCK_ORDER=ROW_MAJOR"));
+        assert!(byte_contains(
+            b"foo BLOCK_ORDER=ROW_MAJOR bar",
+            b"BLOCK_ORDER=ROW_MAJOR"
+        ));
         assert!(!byte_contains(b"foo", b"BLOCK_ORDER=ROW_MAJOR"));
         assert!(byte_contains(b"abc", b""));
     }
