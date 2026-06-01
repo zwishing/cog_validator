@@ -34,8 +34,6 @@ mod tests {
     const VALID: &[&str] = &[
         "68077a72c46a9912474701ef.tif",
         "AOT.tif",
-        "JL1GF04A_PMS_20230301124138_滇池会展中心_3857_cog.tif",
-        "JL1KF01B_PMSR5_20230517113518_昆明世纪城_3857_cog.tif",
         "PuertoRicoTropicalFruit.tiff",
         "PuertoRicoTropicalFruit_cog.tif",
         "antimeridian.tif",

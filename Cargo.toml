@@ -1,6 +1,6 @@
 [package]
 name = "cog_validator"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 authors = ["ZhangWeixin <zwishingbjfu@gmail.com>"]
 description = "Validate Cloud Optimized GeoTIFF (COG) files. Parity with rouault/cog_validator (GDAL reference)."

@@ -2,3 +2,4 @@
 /.DS_Store
 /src/.DS_Store
 .omx/
+/fixtures/*_3857_cog.tif

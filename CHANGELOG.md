@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2 - 2026-06-01
+
+- Removed oversized local COG fixtures from Git tracking.
+- Ignored generated/local `fixtures/*_3857_cog.tif` files to keep the
+  repository and remote pushes lightweight.
+- Kept the 0.2.1 VSI object-storage support unchanged.
+
 ## 0.2.1 - 2026-06-01
 
 - Added GDAL VSI path normalization for common object-storage URLs:
@@ -10,8 +17,6 @@
 - Exported `normalize_vsi_path` and `normalize_vsi_path_str` for callers that
   need to inspect or reuse the GDAL VSI path.
 - Documented `/vsis3/` object-storage usage and GDAL credential configuration.
-- Added two COG fixtures with non-ASCII object names to the local parity test
-  corpus.
 
 ## 0.2.0 - 2026-06-01
 
