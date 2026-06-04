@@ -277,12 +277,6 @@ fn validate_dataset(
     options: ValidationOptions,
     report: &mut ValidationReport,
 ) -> Result<(), ValidateCOGError> {
-    check_image_structure_from_dataset(dst, &options)?;
-    check_georeferencing(dst, &options)?;
-
-    let file_list = collect_file_list(dst)?;
-    check_external_ovr(&file_list)?;
-
     let band_count = dst.raster_count();
     if band_count == 0 {
         return Err(ValidateCOGError::InvalidImageStructureMetadata {
@@ -292,24 +286,35 @@ fn validate_dataset(
         });
     }
 
-    let f = VSIFile::vsi_fopenl(file_path, FileAccessMode::ReadBinary)?;
+    check_image_structure_from_dataset(dst, &options)?;
+    check_georeferencing(dst, &options)?;
+
+    let file_list = collect_file_list(dst)?;
+    check_external_ovr(&file_list)?;
 
     let main_band_1 = dst.rasterband(1)?;
+    let main_ovr_count = main_band_1.overview_count()? as usize;
+    for band_idx in 1..=band_count {
+        let band = dst.rasterband(band_idx)?;
+        let band_name = format!("Band {}", band_idx);
+        check_main_band(&band_name, &band, &options)?;
+        check_band_overview_dimensions(&band, band.overview_count()? as usize)?;
+    }
+    check_dataset_has_overviews(&main_band_1, main_ovr_count, &options, report)?;
+
+    let f = VSIFile::vsi_fopenl(file_path, FileAccessMode::ReadBinary)?;
+
     let main_ifd_offset = read_ifd_offset(&main_band_1, "main band")?;
     let structural_md = parse_structural_metadata(&f, main_ifd_offset)?;
 
-    let ovr_count = main_band_1.overview_count()? as usize;
-    check_dataset_has_overviews(&main_band_1, ovr_count, &options, report)?;
-    check_overview_ifd_and_tiled(&main_band_1, ovr_count, main_ifd_offset)?;
-    check_data_offsets_ordering(&main_band_1, ovr_count, main_ifd_offset)?;
+    check_overview_ifd_and_tiled(&main_band_1, main_ovr_count, main_ifd_offset)?;
+    check_data_offsets_ordering(&main_band_1, main_ovr_count, main_ifd_offset)?;
 
     let mut key_buf = String::with_capacity(48);
     for band_idx in 1..=band_count {
         let band = dst.rasterband(band_idx)?;
         let band_name = format!("Band {}", band_idx);
         let band_ovr_count = band.overview_count()? as usize;
-
-        check_main_band(&band_name, &band, &options)?;
 
         let interleaved_mask =
             if structural_md.mask_interleaved_with_imagery && band.mask_flags()?.is_per_dataset() {
@@ -888,13 +893,6 @@ fn validate_overviews(
     md: &StructuralMetadata,
     key_buf: &mut String,
 ) -> Result<(), ValidateCOGError> {
-    let mut overview_dimensions = Vec::with_capacity(ovr_count);
-    for level in 0..ovr_count {
-        let overview = band.overview(level)?;
-        overview_dimensions.push((overview.x_size(), overview.y_size()));
-    }
-    check_overview_dimensions((band.x_size(), band.y_size()), &overview_dimensions)?;
-
     for level in 0..ovr_count {
         let ovr_band = band.overview(level)?;
         let ovr_name = format!("{} overview_{}", band_name, level);
@@ -915,6 +913,18 @@ fn validate_overviews(
         validate_mask_band(f, &ovr_name, &ovr_band, md, key_buf)?;
     }
     Ok(())
+}
+
+fn check_band_overview_dimensions(
+    band: &RasterBand,
+    ovr_count: usize,
+) -> Result<(), ValidateCOGError> {
+    let mut overview_dimensions = Vec::with_capacity(ovr_count);
+    for level in 0..ovr_count {
+        let overview = band.overview(level)?;
+        overview_dimensions.push((overview.x_size(), overview.y_size()));
+    }
+    check_overview_dimensions((band.x_size(), band.y_size()), &overview_dimensions)
 }
 
 fn first_block_offset(band: &RasterBand) -> Result<Option<u64>, ValidateCOGError> {
