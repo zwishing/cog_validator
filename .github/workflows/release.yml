@@ -1,0 +1,95 @@
+name: Publish crate
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ${{ github.ref_name }}
+    runs-on: ubuntu-24.04
+    environment: crates-io
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@v6
+
+      - name: Install GDAL development files
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libgdal-dev pkg-config
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate tag and package version
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          metadata="$(cargo metadata --no-deps --format-version 1)"
+          package_name="$(jq -r '.packages[0].name' <<<"$metadata")"
+          package_version="$(jq -r '.packages[0].version' <<<"$metadata")"
+
+          if [[ "$GITHUB_REF_NAME" != "v$package_version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $package_version" >&2
+            exit 1
+          fi
+
+          printf 'name=%s\n' "$package_name" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\n' "$package_version" >> "$GITHUB_OUTPUT"
+
+      - name: Test the package
+        run: cargo test --locked
+
+      - name: Verify the package can be published
+        run: cargo publish --dry-run --locked --registry crates-io
+
+      - name: Authenticate with crates.io
+        id: crates_io_auth
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish the package when its version is absent
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates_io_auth.outputs.token }}
+          PACKAGE_NAME: ${{ steps.package.outputs.name }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "https://crates.io/api/v1/crates/$PACKAGE_NAME/$PACKAGE_VERSION")"
+
+          case "$status" in
+            200)
+              echo "$PACKAGE_NAME $PACKAGE_VERSION already exists on crates.io; skipping upload."
+              ;;
+            404)
+              cargo publish --locked --registry crates-io
+              ;;
+            *)
+              echo "Unable to determine crates.io publication state (HTTP $status)." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Create or reconcile the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --title "$TAG_NAME"
+          else
+            gh release create "$TAG_NAME" --verify-tag --title "$TAG_NAME" --generate-notes
+          fi
