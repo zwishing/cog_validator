@@ -35,7 +35,7 @@
 
 **Configuration-test exception:** This task changes repository metadata and local Git configuration, not production source behavior. The approved design uses direct metadata and URL acceptance checks instead of a test-first source-code cycle.
 
-- [ ] **Step 1: Update the package repository metadata**
+- [x] **Step 1: Update the package repository metadata**
 
 Change the `[package]` `repository` field in `Cargo.toml` to:
 
@@ -43,7 +43,7 @@ Change the `[package]` `repository` field in `Cargo.toml` to:
 repository = "https://github.com/mapseekai/cog_validator"
 ~~~
 
-- [ ] **Step 2: Update the documented clone command**
+- [x] **Step 2: Update the documented clone command**
 
 Change the Installation example in `README.md` to:
 
@@ -51,7 +51,7 @@ Change the Installation example in `README.md` to:
 git clone https://github.com/mapseekai/cog_validator.git
 ~~~
 
-- [ ] **Step 3: Point the local origin remote at the canonical SSH URL**
+- [x] **Step 3: Point the local origin remote at the canonical SSH URL**
 
 Run:
 
@@ -59,7 +59,7 @@ Run:
 git remote set-url origin git@github.com:mapseekai/cog_validator.git
 ~~~
 
-- [ ] **Step 4: Verify the three repository identities agree**
+- [x] **Step 4: Verify the three repository identities agree**
 
 Run:
 
@@ -71,7 +71,7 @@ rg -F "git clone https://github.com/mapseekai/cog_validator.git" README.md
 
 Expected: all commands exit with status `0`.
 
-- [ ] **Step 5: Commit the repository migration**
+- [x] **Step 5: Commit the repository migration**
 
 ~~~
 git add Cargo.toml README.md
@@ -90,7 +90,7 @@ git commit -m "chore: update repository URL"
 
 **Configuration-test exception:** GitHub Actions YAML is declarative configuration. Its acceptance checks validate syntax plus each security and release-flow invariant; Cargo's dry run validates the actual package without uploading it.
 
-- [ ] **Step 1: Create the release workflow**
+- [x] **Step 1: Create the release workflow**
 
 Create `.github/workflows/release.yml` with this content:
 
@@ -192,7 +192,7 @@ jobs:
           fi
 ~~~
 
-- [ ] **Step 2: Parse the workflow YAML**
+- [x] **Step 2: Parse the workflow YAML**
 
 Run:
 
@@ -202,7 +202,7 @@ ruby -e 'require "yaml"; YAML.parse_file(".github/workflows/release.yml")'
 
 Expected: exit status `0` with no parsing error.
 
-- [ ] **Step 3: Check the security and flow-critical declarations**
+- [x] **Step 3: Check the security and flow-critical declarations**
 
 Run:
 
@@ -217,7 +217,7 @@ rg -F "gh release create" .github/workflows/release.yml
 
 Expected: each command prints one matching workflow line and exits with status `0`.
 
-- [ ] **Step 4: Review the rendered diff and commit the workflow**
+- [x] **Step 4: Review the rendered diff and commit the workflow**
 
 Run:
 
@@ -242,7 +242,7 @@ Expected: no whitespace errors; the commit contains only the release workflow.
 - Consumes: the migrated repository URL and new workflow.
 - Produces: evidence that the checked-in release source can package and compile for crates.io without uploading a new version.
 
-- [ ] **Step 1: Run the full Rust test suite**
+- [x] **Step 1: Run the full Rust test suite**
 
 ~~~bash
 cargo test --locked
@@ -250,7 +250,7 @@ cargo test --locked
 
 Expected: exit status `0`.
 
-- [ ] **Step 2: Run the crates.io non-uploading publication verification**
+- [x] **Step 2: Run the crates.io non-uploading publication verification**
 
 ~~~bash
 cargo publish --dry-run --locked --registry crates-io
@@ -258,7 +258,7 @@ cargo publish --dry-run --locked --registry crates-io
 
 Expected: Cargo packages and verifies `cog_validator` successfully, then reports that upload was aborted because this is a dry run.
 
-- [ ] **Step 3: Confirm the working tree only contains planned changes**
+- [x] **Step 3: Confirm the working tree only contains planned changes**
 
 ~~~bash
 git status --short --branch
@@ -277,4 +277,3 @@ git push origin v<next-version>
 ~~~
 
 Expected: the `Publish crate` workflow validates the matching version, publishes it through Trusted Publishing, and creates the corresponding GitHub Release.
-
