@@ -64,7 +64,7 @@ The validation logic mirrors [rouault/cog_validator](https://github.com/rouault/
 ## Installation
 
 ```bash
-git clone https://github.com/Zwishing/cog_validator.git
+git clone https://github.com/mapseekai/cog_validator.git
 cd cog_validator
 cargo build --release
 ```

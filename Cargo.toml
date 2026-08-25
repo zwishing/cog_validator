@@ -8,7 +8,7 @@ keywords = ["gdal", "cog", "geotiff", "validator", "geospatial"]
 categories = ["science::geo", "filesystem"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/zwishing/cog_validator"
+repository = "https://github.com/mapseekai/cog_validator"
 documentation = "https://docs.rs/cog_validator"
 exclude = [
     "fixtures/",
